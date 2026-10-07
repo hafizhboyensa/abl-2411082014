@@ -1,84 +1,119 @@
 package com.hafizh.order.service;
 
-import java.time.LocalDate;
 import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import com.hafizh.order.entity.*;
+import org.springframework.web.client.RestClient;
+
+import com.hafizh.order.entity.Orders;
 import com.hafizh.order.repository.OrderRepository;
+import com.hafizh.order.vo.OrderVO;
+import com.hafizh.order.vo.PelangganVO;
+import com.hafizh.order.vo.ProdukVO;
 
 @Service
 public class OrderService {
-    @Autowired private OrderRepository orderRepository;
-    @Autowired private ClientService clientService;
 
-    public Orders buatOrder(Orders o) {
-        ProdukDto produk = validasi(o);
-        if (o.getTglTrans() == null) {
-            o.setTglTrans(LocalDate.now());
-        }
-        o.setTotal(produk.getHarga() * o.getJumlah());
-        return isiVirtual(orderRepository.save(o));
+    @Autowired
+    private OrderRepository orderRepository;
+
+    private final RestClient restClient;
+
+    public OrderService(RestClient restClient) {
+        this.restClient = restClient;
     }
 
-    public List<Orders> getAll() {
-        List<Orders> list = orderRepository.findAll();
-        list.forEach(this::isiVirtual);
-        return list;
+    public List<Orders> getAllOrder() {
+        return orderRepository.findAll();
     }
 
-    public Orders getById(Long id) {
-        Orders o = orderRepository.findById(id).orElse(null);
-        return o == null ? null : isiVirtual(o);
+    public Orders getOrderById(Long id) {
+        return orderRepository.findById(id).orElse(null);
     }
 
-    public List<Orders> getByPelanggan(Long id) {
-        List<Orders> list = orderRepository.findByPelangganId(id);
-        list.forEach(this::isiVirtual);
-        return list;
+    public OrderVO saveOrder(Orders order) {
+
+    // Cek Pelanggan
+    PelangganVO pelanggan = getPelanggan(order.getPelanggan_id());
+
+    if (pelanggan == null) {
+        throw new RuntimeException("Pelanggan tidak ditemukan");
     }
 
-    public Orders updateOrder(Long id, Orders o) {
-        Orders existing = orderRepository.findById(id).orElse(null);
-        if (existing == null) {
-            return null;
-        }
-        ProdukDto produk = validasi(o);
-        existing.setProdukId(o.getProdukId());
-        existing.setPelangganId(o.getPelangganId());
-        existing.setJumlah(o.getJumlah());
-        if (o.getTglTrans() != null) {
-            existing.setTglTrans(o.getTglTrans());
-        }
-        existing.setTotal(produk.getHarga() * o.getJumlah());
-        return isiVirtual(orderRepository.save(existing));
+    // Cek Produk
+    ProdukVO produk = getProduk(order.getProduk_id());
+
+    if (produk == null) {
+        throw new RuntimeException("Produk tidak ditemukan");
     }
 
-    public boolean deleteOrder(Long id) {
-        if (!orderRepository.existsById(id)) {
-            return false;
-        }
+    // Ambil harga Produk dan Menghitung total
+    double total = produk.getHarga() * order.getJumlah();
+
+    order.setTotal(total);
+
+    Orders savedOrder = orderRepository.save(order);
+
+    // Simpan Order
+    return getOrderVO(savedOrder);
+}
+
+    public void deleteOrder(Long id) {
         orderRepository.deleteById(id);
-        return true;
     }
 
-    // Cek pelanggan & produk ke project lain, kembalikan data produk
-    private ProdukDto validasi(Orders o) {
-        PelangganDto pelanggan = clientService.getPelanggan(o.getPelangganId());
-        if (pelanggan == null || pelanggan.getId() == null) {
-            throw new IllegalArgumentException("Pelanggan tidak ditemukan");
+    public Orders updateOrder(Long id, Orders orders) {
+        Orders existing = orderRepository.findById(id).orElse(null);
+        if (existing != null) {
+            existing.setProduk_id(orders.getProduk_id());
+            existing.setPelanggan_id(orders.getPelanggan_id());
+            existing.setTgl_trans(orders.getTgl_trans());
+            existing.setJumlah(orders.getJumlah());
+            existing.setTotal(orders.getTotal());
+            return orderRepository.save(existing);
         }
-        ProdukDto produk = clientService.getProduk(o.getProdukId());
-        if (produk == null || produk.getId() == null) {
-            throw new IllegalArgumentException("Produk tidak ditemukan");
-        }
-        return produk;
+        return null;
     }
 
-    // Isi virtual object (produk & pelanggan) dengan memanggil URL service masing-masing
-    private Orders isiVirtual(Orders o) {
-        o.setProduk(clientService.getProduk(o.getProdukId()));
-        o.setPelanggan(clientService.getPelanggan(o.getPelangganId()));
-        return o;
+    // Mengambil Data Pelanggan
+
+    public PelangganVO getPelanggan(Long id) {
+
+        return restClient.get()
+                .uri("http://localhost:8082/api/pelanggan/" + id)
+                .retrieve()
+                .body(PelangganVO.class);
     }
+
+    // Mengambil Data Produk
+
+    public ProdukVO getProduk(Long id) {
+
+        return restClient.get()
+                .uri("http://localhost:8081/api/produk/" + id)
+                .retrieve()
+                .body(ProdukVO.class);
+    }
+
+    public OrderVO getOrderVO(Orders order) {
+
+        PelangganVO pelanggan = getPelanggan(order.getPelanggan_id());
+        ProdukVO produk = getProduk(order.getProduk_id());
+
+        OrderVO orderVO = new OrderVO();
+
+        orderVO.setId(order.getId());
+        orderVO.setProdukId(order.getProduk_id());
+        orderVO.setPelangganId(order.getPelanggan_id());
+        orderVO.setJumlah(order.getJumlah());
+        orderVO.setTglTrans(order.getTgl_trans());
+        orderVO.setTotal(order.getTotal());
+
+        orderVO.setPelanggan(pelanggan);
+        orderVO.setProduk(produk);
+
+        return orderVO;
+    }
+
 }

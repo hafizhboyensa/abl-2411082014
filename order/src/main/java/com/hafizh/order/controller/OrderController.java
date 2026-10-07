@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.hafizh.order.entity.Orders;
 import com.hafizh.order.service.OrderService;
+import com.hafizh.order.vo.OrderVO;
 
 @RestController
 @RequestMapping("/api/order")
@@ -13,50 +14,32 @@ public class OrderController {
     @Autowired
     private OrderService orderService;
 
-    @PostMapping
-    public ResponseEntity<?> create(@RequestBody Orders order) {
-        try {
-            return ResponseEntity.ok(orderService.buatOrder(order));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
+    // --- ENDPOINT ORDER ---
     @GetMapping
-    public List<Orders> getAll(@RequestParam(value = "pelangganId", required = false) Long pelangganId) {
-        if (pelangganId != null) {
-            return orderService.getByPelanggan(pelangganId);
-        }
-        return orderService.getAll();
+    public List<Orders> getAllOrder() {
+        return orderService.getAllOrder();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getById(@PathVariable("id") Long id) {
-        Orders order = orderService.getById(id);
-        if (order == null) {
-            return ResponseEntity.status(404).body("Order tidak ditemukan");
-        }
-        return ResponseEntity.ok(order);
+    public ResponseEntity<Orders> getOrderById(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(orderService.getOrderById(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<OrderVO> createOrder(@RequestBody Orders order) {
+        return ResponseEntity.ok(orderService.saveOrder(order));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable("id") Long id, @RequestBody Orders order) {
-        try {
-            Orders hasil = orderService.updateOrder(id, order);
-            if (hasil == null) {
-                return ResponseEntity.status(404).body("Order tidak ditemukan");
-            }
-            return ResponseEntity.ok(hasil);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<Orders> updateOrder(
+            @PathVariable("id") Long id,
+            @RequestBody Orders order) {
+        return ResponseEntity.ok(orderService.updateOrder(id, order));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable("id") Long id) {
-        if (!orderService.deleteOrder(id)) {
-            return ResponseEntity.status(404).body("Order tidak ditemukan");
-        }
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<String> deleteOrder(@PathVariable("id") Long id) {
+        orderService.deleteOrder(id);
+        return ResponseEntity.ok("Succes To Delete Data With ID : " + id);
     }
 }
